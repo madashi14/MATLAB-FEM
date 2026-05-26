@@ -1,2 +1,2 @@
 # MATLAB-FEM
-a little matlab script to play with for FEA simulations. 
+a little matlab script to play with for FEA simulations. Inside modelli/prova1 you'll find how a model must be set up in order for the software to work. To be continued....
