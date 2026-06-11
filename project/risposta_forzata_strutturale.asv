@@ -1,0 +1,188 @@
+function [risp,fig] = risposta_forzata_strutturale(s,fig)
+    vel=s.el;
+    nodi=s.p;
+    if ~s.nf
+        risp = [];
+        error_window('No Forces !!!','logo.jpg');
+        return
+    end
+
+    % Matrici strutturali
+    M = s.M;
+    K = s.K;
+
+    if isfield(s,'C') && ~isempty(s.C)
+        C = s.C;
+    else
+        C = zeros(size(M));
+    end
+
+    n = size(M,1);
+
+    % Vettore spaziale globale della forza
+    F0 = s.Forza(:);
+
+    if length(F0) ~= n
+        error('Dimensione errata: s.Forza deve avere dimensione ndof x 1.');
+    end
+
+    % Scelta forzante temporale
+    ft = scegli_forzante_temporale();
+
+    % Tempo di integrazione
+    T = ft.t(:);
+
+    % Condizioni iniziali
+    x0  = zeros(n,1);
+    dx0 = zeros(n,1);
+    y0  = [x0; dx0];
+
+    % Scelta solver ODE
+    [odesol,options] = scelta_ode_solver();
+
+    % Integrazione
+    [t,y] = odesol(@(t,y) ode_forzata_strutturale(t,y,M,C,K,F0,ft), ...
+                   T,y0,options);
+
+    % Salvataggio risultati
+    risp.t  = t;
+    risp.y  = y;
+    risp.x  = y(:,1:n);
+    risp.dx = y(:,n+1:2*n);
+    risp.F0 = F0;
+    risp.ft = ft;
+
+    % Animazione risposta dell'intero sistema
+    fig = plotta_risposta_forzata_animata(risp,vel,nodi,fig);
+
+end
+function dydt = ode_forzata_strutturale(t,y,M,C,K,F0,ft)
+
+    n = size(M,1);
+
+    x  = y(1:n);
+    dx = y(n+1:2*n);
+
+    % Valore della forzante temporale al tempo t
+    alfa = interp1(ft.t,ft.x,t,'linear',0);
+
+    % Forza globale al tempo t
+    Ft = F0 * alfa;
+
+    % Equazione dinamica
+    ddx = M \ (Ft - C*dx - K*x);
+
+    % Derivata del vettore di stato
+    dydt = [dx; ddx];
+
+end
+
+function fig = plotta_risposta_forzata_animata(risp,vel,nodi,fig)
+
+    sc = get_sc();
+
+    L = dimensione_struttura(nodi);
+    wmax = max_response_disp(risp.x);
+
+    if wmax < eps
+        scale_factor = 1;
+    else
+        scale_factor = sc*L/wmax;
+    end
+
+    nd = length(nodi);
+    N = get_Nplot();
+
+    nt = length(risp.t);
+
+    nframe = 80;   % numero frame animazione
+    ncycle = 1;    % la risposta vera non va ciclata artificialmente
+
+    fig = set_fig(fig,'Risposta forzata animata');
+    set(fig,'Toolbar','figure')
+    set(fig,'MenuBar','figure')
+
+    % scelgo nframe istanti regolari dentro la risposta
+    if nt > nframe
+        vk = round(linspace(1,nt,nframe));
+    else
+        vk = 1:nt;
+    end
+
+    for c = 1:ncycle
+
+        for iframe = 1:length(vk)
+
+            if ~ishandle(fig)
+                return
+            end
+
+            k = vk(iframe);
+
+            xk = risp.x(k,:)';
+            xk = xk * scale_factor;
+
+            nodi_def = nodi;
+
+            for i = 1:nd
+
+                ii = (i-1)*3;
+
+                nodi_def(i).x = nodi(i).x + xk(ii+1);
+                nodi_def(i).y = nodi(i).y + xk(ii+2);
+                nodi_def(i).z = nodi(i).z + xk(ii+3);
+
+            end
+
+            cla
+
+            plotta_modello_corrente(vel,nodi,N,'k--');
+            hold on
+            plotta_modello_corrente(vel,nodi_def,N,'r-');
+
+            title(sprintf('Risposta forzata - t = %.5f s',risp.t(k)));
+
+            drawnow
+
+            if ~ishandle(fig)
+                return
+            end
+
+        end
+
+    end
+
+end
+
+function wmax = max_response_disp(X)
+
+    % X ha dimensione nt x ndof
+    % ndof = 3*nd
+
+    [nt,ndof] = size(X);
+
+    nd = ndof/3;
+
+    wmax = 0;
+
+    for k = 1:nt
+
+        for i = 1:nd
+
+            ii = (i-1)*3;
+
+            ux = X(k,ii+1);
+            uy = X(k,ii+2);
+            uz = X(k,ii+3);
+
+            Li = norm([ux uy uz]);
+
+            if Li > wmax
+                wmax = Li;
+            end
+
+        end
+
+    end
+
+end

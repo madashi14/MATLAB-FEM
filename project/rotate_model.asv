@@ -1,0 +1,30 @@
+function st = rotate_model(st, thx, thy, thz)
+stitle='Ruota Modello';
+theta = char(952);             % 952 = Unicode per θ
+vs = { [theta '_x'], [theta '_y'], [theta '_z'] };
+ancora=1;
+xmin=[0, 0, 0];
+xdef=[0, 0, 0];
+xmax=[360, 360, 360];
+while ancora
+    out=query_multiple_exit(stitle,vs,xmin,xmax,xdef);
+    thx = out(1); 
+    thy = out(2); 
+    thz = out(3);
+    ancora=0;
+end
+
+Rx=Rx_new(thx);
+Ry=Ry_new(thy);
+Rz=Rz_new(thz);
+
+R=Rx*Ry*Rz;
+
+st.nodes=(R*st.nodes')';
+for i = 1:numel(st.elem)
+    coords = [st.elem(i).x(:), st.elem(i).y(:), st.elem(i).z(:)]; % n x 3
+    coords_rot = (R * coords')';
+    st.elem(i).x = coords_rot(:,1)';
+    st.elem(i).y = coords_rot(:,2)';
+    st.elem(i).z = coords_rot(:,3)';
+end
